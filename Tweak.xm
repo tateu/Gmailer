@@ -9,30 +9,28 @@
 // #define NSLog(fmt, ...)
 #endif
 
+#define plistfile @"/var/mobile/Library/Preferences/net.tateu.gmailer.plist"
 static NSArray *sharedGmailAccounts = nil;
 static NSArray *iOSGmailAccounts = nil;
 static PCSimpleTimer *updateTimer = nil;
 
-static void loadGmailAccounts()
+static int loadGmailAccounts()
 {
 	LSApplicationProxy *gmailApp = [%c(LSApplicationProxy) applicationProxyForIdentifier:@"com.google.Gmail"];
 	if (!gmailApp) {
-		NSLog(@"[Gmailer] Error: Could not find Gmail application");
-		return;
+		return 1;
 	}
 
 	NSURL *containerURL = [gmailApp.groupContainerURLs objectForKey:@"group.com.google.Gmail"];
 	if (!containerURL) {
-		NSLog(@"[Gmailer] Error: Could not find groupContainerURLs");
-		return;
+		return 2;
 	}
 
 	NSUserDefaults *userDefaults = [[%c(NSUserDefaults) alloc] _initWithSuiteName:@"group.com.google.Gmail" container:containerURL];
 	NSDictionary *accountIds = [userDefaults objectForKey:@"kGmailSharedStorageSignedInAccountIds"];
 
 	if (!accountIds || accountIds.count == 0) {
-		NSLog(@"[Gmailer] Error: Could not find kGmailSharedStorageSignedInAccountIds");
-		return;
+		return 3;
 	}
 
 	// ***from gmailpushenabler by Leonard Hecker (https://gist.github.com/lhecker/00850043b35cf207cafc)
@@ -63,9 +61,15 @@ static void loadGmailAccounts()
 		}
 	}
 
+	if (accounts.count == 0) {
+		return 4;
+	}
+
 	iOSGmailAccounts = [accounts copy];
 
 	TweakLog(@"loadGmailAccounts\n%@\n%@", iOSGmailAccounts, sharedGmailAccounts);
+
+	return 0;
 }
 
 %group SpringBoardGroup
@@ -75,7 +79,50 @@ static void loadGmailAccounts()
 	%orig;
 
 	dispatch_async(dispatch_get_main_queue(), ^{
-		loadGmailAccounts();
+		int result = loadGmailAccounts();
+
+		NSMutableString *emailAddresses = [[NSMutableString alloc] init];
+		if (result == 0) {
+			for (NSString *address in iOSGmailAccounts) {
+				BOOL match = NO;
+				for (NSSet *addressSet in sharedGmailAccounts) {
+					if ([addressSet containsObject:address]) {
+						match = YES;
+						break;
+					}
+				}
+
+				if (!match) {
+					if (emailAddresses.length) {
+						[emailAddresses appendString:@","];
+					}
+					[emailAddresses appendString:address];
+				}
+			}
+
+			if (emailAddresses.length) {
+				result = 5;
+			}
+		}
+
+		NSMutableDictionary *settings = [[NSMutableDictionary alloc] init];
+		if (result != 0) {
+			if (result == 1) {
+				NSLog(@"[Gmailer] Error: Could not find Gmail application");
+			} else if (result == 2) {
+				NSLog(@"[Gmailer] Error: Could not find Gmail groupContainerURLs");
+			} else if (result == 3) {
+				NSLog(@"[Gmailer] Error: Could not find Gmail kGmailSharedStorageSignedInAccountIds");
+			} else if (result == 4) {
+				NSLog(@"[Gmailer] Error: Could not find iOS Gmail accounts");
+			} else if (result == 5) {
+				NSLog(@"[Gmailer] Warning: Some of your Gmail accounts do not have corresponding iOS accounts with the same email address");
+				[settings setObject:emailAddresses forKey:@"message"];
+			}
+
+			[settings setObject:@(result) forKey:@"result"];
+		}
+		[settings writeToFile:plistfile atomically:YES];
 	});
 }
 %end

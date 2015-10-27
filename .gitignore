@@ -1,0 +1,9 @@
+_
+obj
+*.o
+theos
+*~
+.DS_Store
+.theos
+docs
+info

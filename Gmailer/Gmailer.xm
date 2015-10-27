@@ -10,15 +10,15 @@
 #define NSLog(fmt, ...)
 #endif
 
-#define _plistfile @"/var/mobile/Library/Preferences/net.tateu.gmailer.plist"
-static NSMutableDictionary *_settings;
+#define plistfile @"/var/mobile/Library/Preferences/net.tateu.gmailer.plist"
+static NSMutableDictionary *settings;
 
 @interface GmailerListController: PSListController {
 	NSMutableArray *activeAccounts;
 }
 - (void)fetchForAccount:(id)sender;
+// - (void)showResultMessage:(id)sender;
 @end
-
 
 @implementation GmailerListController
 - (void)fetchForAccount:(PSSpecifier *)specifier
@@ -31,10 +31,72 @@ static NSMutableDictionary *_settings;
 	}
 }
 
+// - (void)showResultMessage:(PSSpecifier *)specifier
+// {
+// 	UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:title message:[NSString stringWithFormat:@"message] delegate:self cancelButtonTitle:@"Ok" otherButtonTitles:nil];
+// }
+
 - (id)specifiers
 {
 	if(_specifiers == nil) {
 		_specifiers = [self loadSpecifiersFromPlistName:@"Gmailer" target:self];
+		PSSpecifier *specifier = nil;
+
+		if (settings[@"result"]) {
+			int result = [settings[@"result"] intValue];
+			NSString *title = @"Errors";
+
+			if (result == 5) {
+				title = @"Warnings";
+			}
+
+			specifier = [PSSpecifier preferenceSpecifierNamed:title
+														target:self
+														   set:nil
+														   get:nil
+														detail:nil
+														  cell:PSGroupCell
+														  edit:nil];
+
+			[(NSMutableArray *)_specifiers addObject:specifier];
+
+			if (result == 1) {
+				title = @"Gmail App not installed";
+			} else if (result == 2) {
+				title = @"Gmail App not installed correctly";
+			} else if (result == 3) {
+				title = @"No accounts enabled in Gmail App";
+			} else if (result == 4) {
+				title = @"No iOS Gmail accounts are enabled";
+			} else if (result == 5) {
+				title = [NSString stringWithFormat:@"Some Gmail accounts do not match iOS accounts (%@)", settings[@"message"]];
+			}
+
+			specifier = [PSSpecifier preferenceSpecifierNamed:title
+														target:self
+														   set:nil
+														   get:nil
+														detail:nil
+														  cell:PSStaticTextCell //PSButtonCell
+														  edit:nil];
+
+			// specifier->action = @selector(showResultMessage:);
+			[specifier setProperty:title forKey:@"title"];
+			[specifier setProperty:title forKey:@"label"];
+			[specifier setProperty:@(result) forKey:@"index"];
+
+			[(NSMutableArray *)_specifiers addObject:specifier];
+		}
+
+		specifier = [PSSpecifier preferenceSpecifierNamed:@"Fetch Now"
+													target:self
+													   set:nil
+													   get:nil
+													detail:nil
+													  cell:PSGroupCell
+													  edit:nil];
+
+		[(NSMutableArray *)_specifiers addObject:specifier];
 
 		activeAccounts = [[NSMutableArray alloc] init];
 		int i = 0;
@@ -45,12 +107,12 @@ static NSMutableDictionary *_settings;
 				[activeAccounts addObject:account];
 
 				PSSpecifier *specifier = [PSSpecifier preferenceSpecifierNamed:displayName
-																				target:self
-																				   set:nil
-																				   get:nil
-																				detail:nil
-																				  cell:PSButtonCell
-																				  edit:nil];
+																		target:self
+																		   set:nil
+																		   get:nil
+																		detail:nil
+																		  cell:PSButtonCell
+																		  edit:nil];
 
 				specifier->action = @selector(fetchForAccount:);
 				[specifier setProperty:displayName forKey:@"title"];
@@ -67,7 +129,7 @@ static NSMutableDictionary *_settings;
 - (id)initForContentSize:(CGSize)size
 {
 	if ((self = [super initForContentSize:size]) != nil) {
-		_settings = [NSMutableDictionary dictionaryWithContentsOfFile:_plistfile] ?: [NSMutableDictionary dictionary];
+		settings = [NSMutableDictionary dictionaryWithContentsOfFile:plistfile] ?: [NSMutableDictionary dictionary];
 	}
 
 	return self;
@@ -75,16 +137,15 @@ static NSMutableDictionary *_settings;
 
 -(void)viewWillAppear:(BOOL)animated
 {
-	_settings = ([NSMutableDictionary dictionaryWithContentsOfFile:_plistfile] ?: [NSMutableDictionary dictionary]);
+	settings = ([NSMutableDictionary dictionaryWithContentsOfFile:plistfile] ?: [NSMutableDictionary dictionary]);
 	[super viewWillAppear:animated];
 	[self reload];
 }
 
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier
 {
-	_settings = ([NSMutableDictionary dictionaryWithContentsOfFile:_plistfile] ?: [NSMutableDictionary dictionary]);
-	[_settings setObject:value forKey:specifier.properties[@"key"]];
-	[_settings writeToFile:_plistfile atomically:YES];
+	[settings setObject:value forKey:specifier.properties[@"key"]];
+	[settings writeToFile:plistfile atomically:YES];
 
 	NSString *post = specifier.properties[@"PostNotification"];
 	if (post) {
@@ -96,7 +157,7 @@ static NSMutableDictionary *_settings;
 {
 	NSString *key = [specifier propertyForKey:@"key"];
 	id defaultValue = [specifier propertyForKey:@"default"];
-	id plistValue = [_settings objectForKey:key];
+	id plistValue = [settings objectForKey:key];
 	if (!plistValue) plistValue = defaultValue;
 
 	return plistValue;
