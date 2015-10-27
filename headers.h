@@ -1,3 +1,18 @@
+@interface LSResourceProxy : NSObject
+@end
+
+@interface LSBundleProxy : LSResourceProxy
+@property (nonatomic,readonly) NSDictionary *groupContainerURLs;
+@end
+
+@interface LSApplicationProxy : LSBundleProxy
++ (id)applicationProxyForIdentifier:(id)arg1;
+@end
+
+@interface NSUserDefaults (Private)
+- (instancetype)_initWithSuiteName:(NSString *)suiteName container:(NSURL *)container;
+@end
+
 @interface PCSimpleTimer : NSObject {
 	double _fireTime;
 }

@@ -6,13 +6,80 @@
 #define TweakLog(fmt, ...) NSLog((@"[Gmailer] [Line %d]: "  fmt), __LINE__, ##__VA_ARGS__)
 #else
 #define TweakLog(fmt, ...)
-#define NSLog(fmt, ...)
+// #define NSLog(fmt, ...)
 #endif
 
-static NSArray *accounts = nil;
+static NSArray *sharedGmailAccounts = nil;
+static NSArray *iOSGmailAccounts = nil;
 static PCSimpleTimer *updateTimer = nil;
 
+static void loadGmailAccounts()
+{
+	LSApplicationProxy *gmailApp = [%c(LSApplicationProxy) applicationProxyForIdentifier:@"com.google.Gmail"];
+	if (!gmailApp) {
+		NSLog(@"[Gmailer] Error: Could not find Gmail application");
+		return;
+	}
+
+	NSURL *containerURL = [gmailApp.groupContainerURLs objectForKey:@"group.com.google.Gmail"];
+	if (!containerURL) {
+		NSLog(@"[Gmailer] Error: Could not find groupContainerURLs");
+		return;
+	}
+
+	NSUserDefaults *userDefaults = [[%c(NSUserDefaults) alloc] _initWithSuiteName:@"group.com.google.Gmail" container:containerURL];
+	NSDictionary *accountIds = [userDefaults objectForKey:@"kGmailSharedStorageSignedInAccountIds"];
+
+	if (!accountIds || accountIds.count == 0) {
+		NSLog(@"[Gmailer] Error: Could not find kGmailSharedStorageSignedInAccountIds");
+		return;
+	}
+
+	// ***from gmailpushenabler by Leonard Hecker (https://gist.github.com/lhecker/00850043b35cf207cafc)
+	NSMutableArray *accounts = [NSMutableArray arrayWithCapacity:accountIds.count];
+
+	for (NSString *accountId in accountIds) {
+		NSString *accountKey = [@"kGmailSharedStorageAddresses_" stringByAppendingString:accountId];
+		NSArray *accountAddresses = [userDefaults objectForKey:accountKey];
+		NSMutableSet *addressSet = [NSMutableSet setWithCapacity:accountAddresses.count];
+
+		for (NSArray *addressInfo in accountAddresses) {
+			if (addressInfo.count == 2) {
+				[addressSet addObject:addressInfo[1]];
+			}
+		}
+
+		[accounts addObject:addressSet];
+	}
+
+	sharedGmailAccounts = [accounts copy];
+	// ***
+
+	accounts = nil;
+	accounts = [[NSMutableArray alloc] init];
+	for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
+		if ([account isKindOfClass:%c(GmailAccount)]) {
+			[accounts addObject:[account firstEmailAddress]];
+		}
+	}
+
+	iOSGmailAccounts = [accounts copy];
+
+	TweakLog(@"loadGmailAccounts\n%@\n%@", iOSGmailAccounts, sharedGmailAccounts);
+}
+
 %group SpringBoardGroup
+%hook SpringBoard
+-(void)applicationDidFinishLaunching:(id)application
+{
+	%orig;
+
+	dispatch_async(dispatch_get_main_queue(), ^{
+		loadGmailAccounts();
+	});
+}
+%end
+
 %hook APSIncomingMessage
 %new
 - (void)GAUpdateTimerFired:(PCSimpleTimer *)timer
@@ -46,15 +113,26 @@ static PCSimpleTimer *updateTimer = nil;
 	//     APSProtocolMessagePriority = 10;
 	// }
 
-	if (info[@"APSMessageTopic"] && [info[@"APSMessageTopic"] isEqualToString:@"com.google.Gmail"]) {
-		NSMutableSet *emailAddresses;
+	if (iOSGmailAccounts.count > 0 && info[@"APSMessageTopic"] && [info[@"APSMessageTopic"] isEqualToString:@"com.google.Gmail"]) {
+		NSMutableSet *emailAddresses = nil;
 		NSString *emailAddress = nil;
 		NSDictionary *APSMessageUserInfo = info[@"APSMessageUserInfo"];
+
 		if (APSMessageUserInfo[@"a"]) {
-			NSInteger index = [APSMessageUserInfo[@"a"] intValue] - 1;
-			if (accounts && index < [accounts count]) {
-				emailAddress = [accounts objectAtIndex:index];
+			NSInteger index = [APSMessageUserInfo[@"a"] intValue];
+
+			// ***from gmailpushenabler by Leonard Hecker (https://gist.github.com/lhecker/00850043b35cf207cafc)
+			if (index >= 1 && index <= sharedGmailAccounts.count) {
+				NSSet *addressSet = sharedGmailAccounts[index - 1];
+
+				for (NSString *address in iOSGmailAccounts) {
+					if ([addressSet containsObject:address]) {
+						emailAddress = address;
+						break;
+					}
+				}
 			}
+			// ***
 		}
 
 		NSDate *fireDate = [NSDate dateWithTimeIntervalSinceNow:10];
@@ -102,24 +180,10 @@ static PCSimpleTimer *updateTimer = nil;
 // %end //hook AutoFetchController
 // %end //group MailGroup
 
-static void loadGmailAccounts()
-{
-	NSMutableArray *preSort = [[NSMutableArray alloc] init];
-	for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
-		if ([account isKindOfClass:%c(GmailAccount)]) {
-			[preSort addObject:[account firstEmailAddress]];
-		}
-	}
-
-	accounts = [[preSort sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)] copy];
-	TweakLog(@"loadGmailAccounts\n%@\n%@", preSort, accounts);
-}
-
 %ctor
 {
 	@autoreleasepool {
 		if (%c(SpringBoard)) {
-			loadGmailAccounts();
 			%init(SpringBoardGroup);
 		} else {
 			NSString *bundleIdentifier = [NSBundle mainBundle].bundleIdentifier;
@@ -133,35 +197,34 @@ static void loadGmailAccounts()
 
 					if ([sender isEqualToString:@"Automatic"]) {
 						NSMutableSet *accountsToFetch = [[NSMutableSet alloc] init];
-						// NSArray *emailAddresses = [notification.userInfo[@"emailAddresses"] componentsSeparatedByString:@","];
-						//
-						// if (emailAddresses && [emailAddresses count] > 0) {
-						// 	for (NSString *emailAddress in emailAddresses) {
-						// 		MailAccount *account = [%c(MailAccount) accountContainingEmailAddress:emailAddress];
-						//
-						// 		if (account) {
-						// 			TweakLog(@"Fetch List %@", account);
-						// 			[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
-						// 		}
-						// 	}
-						// } else {
+						NSArray *emailAddresses = [notification.userInfo[@"emailAddresses"] componentsSeparatedByString:@","];
+
+						if (emailAddresses && emailAddresses.count > 0) {
+							for (NSString *emailAddress in emailAddresses) {
+								MailAccount *account = [%c(MailAccount) accountContainingEmailAddress:emailAddress];
+
+								if (account) {
+									TweakLog(@"Fetch List %@", account);
+									[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
+								}
+							}
+						} else {
 							for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
 								if ([account isKindOfClass:%c(GmailAccount)]) {
 									TweakLog(@"Fetch All %@", account);
 									[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
 								}
 							}
-						// }
-
-						if ([accountsToFetch count] > 0) {
-							[autoFetchController fetchNow:0 withSources:accountsToFetch];
 						}
-						accountsToFetch = nil;
+
+						if (accountsToFetch.count > 0) {
+							[autoFetchController fetchNow:126 withSources:accountsToFetch];
+						}
 					} else {
 						MailAccount *account = [%c(MailAccount) accountWithUniqueId:sender];
 						TweakLog(@"Fetch Preferences %@", account);
 						MailboxSource *source = [[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]];
-						[autoFetchController fetchNow:0 withSources:@[source]];
+						[autoFetchController fetchNow:126 withSources:@[source]];
 					}
 				}];
 			}
