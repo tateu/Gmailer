@@ -35,7 +35,9 @@ static NSMutableDictionary *settings;
 {
 	NSString *message;
 	int index = [specifier propertyForKey:@"index"] ? [[specifier propertyForKey:@"index"] intValue] : -1;
-	if (index == 1) {
+	if (index == 0) {
+		message = [specifier propertyForKey:@"label"];
+	} else if (index == 1) {
 		message = @"It appears that the Gmail app is not installed on your device.\n\nYou should install it, open it, then configure and log into your accounts, then respring.\n\nThis is a fatal error.";
 	} else if (index == 2) {
 		message = @"It appears that the Gmail app is not setup correctly (groupContainerURLs not found).\n\nYou should open it, then configure and log into your accounts, then respring.\n\nThis is a fatal error.";
@@ -58,13 +60,56 @@ static NSMutableDictionary *settings;
 
 		if (settings[@"result"]) {
 			int result = [settings[@"result"] intValue];
-			NSString *title = @"Errors";
+			if (result > 0) {
+				NSString *title = @"Errors";
 
-			if (result == 5) {
-				title = @"Warnings";
+				if (result == 5) {
+					title = @"Warnings";
+				}
+
+				specifier = [PSSpecifier preferenceSpecifierNamed:title
+															target:self
+															   set:nil
+															   get:nil
+															detail:nil
+															  cell:PSGroupCell
+															  edit:nil];
+
+				[(NSMutableArray *)_specifiers addObject:specifier];
+
+				if (result == 1) {
+					title = @"Gmail App not installed";
+				} else if (result == 2) {
+					title = @"Gmail App not installed correctly";
+				} else if (result == 3) {
+					title = @"No accounts enabled in Gmail App";
+				} else if (result == 4) {
+					title = @"No iOS Gmail accounts are enabled";
+				} else if (result == 5) {
+					title = [NSString stringWithFormat:@"Some Gmail accounts do not match iOS accounts"];
+				}
+
+				specifier = [PSSpecifier preferenceSpecifierNamed:title
+															target:self
+															   set:nil
+															   get:nil
+															detail:nil
+															  cell:PSButtonCell //PSStaticTextCell PSButtonCell
+															  edit:nil];
+
+				[(NSMutableArray *)_specifiers addObject:specifier];
+
+				specifier->action = @selector(showResultMessage:);
+				[specifier setProperty:title forKey:@"title"];
+				if (result == 5) [specifier setProperty:settings[@"message"] forKey:@"label"];
+				[specifier setProperty:@(result) forKey:@"index"];
+
+				[(NSMutableArray *)_specifiers addObject:specifier];
 			}
+		}
 
-			specifier = [PSSpecifier preferenceSpecifierNamed:title
+		if (settings[@"trackedAccounts"]) {
+			specifier = [PSSpecifier preferenceSpecifierNamed:@"Tracked Accounts"
 														target:self
 														   set:nil
 														   get:nil
@@ -74,32 +119,23 @@ static NSMutableDictionary *settings;
 
 			[(NSMutableArray *)_specifiers addObject:specifier];
 
-			if (result == 1) {
-				title = @"Gmail App not installed";
-			} else if (result == 2) {
-				title = @"Gmail App not installed correctly";
-			} else if (result == 3) {
-				title = @"No accounts enabled in Gmail App";
-			} else if (result == 4) {
-				title = @"No iOS Gmail accounts are enabled";
-			} else if (result == 5) {
-				title = [NSString stringWithFormat:@"Some Gmail accounts do not match iOS accounts"];
+			for (NSString *trackedAccount in settings[@"trackedAccounts"]) {
+
+  				specifier = [PSSpecifier preferenceSpecifierNamed:trackedAccount
+  															target:self
+  															   set:nil
+  															   get:nil
+  															detail:nil
+  															  cell:PSButtonCell
+  															  edit:nil];
+
+				specifier->action = @selector(showResultMessage:);
+				[specifier setProperty:trackedAccount forKey:@"title"];
+				[specifier setProperty:trackedAccount forKey:@"label"];
+				[specifier setProperty:@(0) forKey:@"index"];
+
+				[(NSMutableArray *)_specifiers addObject:specifier];
 			}
-
-			specifier = [PSSpecifier preferenceSpecifierNamed:title
-														target:self
-														   set:nil
-														   get:nil
-														detail:nil
-														  cell:PSButtonCell //PSStaticTextCell PSButtonCell
-														  edit:nil];
-
-			specifier->action = @selector(showResultMessage:);
-			[specifier setProperty:title forKey:@"title"];
-			if (result == 5) [specifier setProperty:settings[@"message"] forKey:@"label"];
-			[specifier setProperty:@(result) forKey:@"index"];
-
-			[(NSMutableArray *)_specifiers addObject:specifier];
 		}
 
 		specifier = [PSSpecifier preferenceSpecifierNamed:@"Fetch Now"

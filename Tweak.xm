@@ -1,7 +1,7 @@
 #import <Foundation/NSDistributedNotificationCenter.h>
 #import "headers.h"
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
 #define TweakLog(fmt, ...) NSLog((@"[Gmailer] [Line %d]: "  fmt), __LINE__, ##__VA_ARGS__)
 #else
@@ -10,19 +10,22 @@
 #endif
 
 #define plistfile @"/var/mobile/Library/Preferences/net.tateu.gmailer.plist"
+static NSMutableDictionary *settings = nil;
 static NSArray *sharedGmailAccounts = nil;
-static NSArray *iOSGmailAccounts = nil;
+static NSMutableArray *iOSGmailAccounts = nil;
 static PCSimpleTimer *updateTimer = nil;
 
 static int loadGmailAccounts()
 {
 	LSApplicationProxy *gmailApp = [%c(LSApplicationProxy) applicationProxyForIdentifier:@"com.google.Gmail"];
 	if (!gmailApp) {
+		NSLog(@"[Gmailer] Error: Could not find Gmail application");
 		return 1;
 	}
 
 	NSURL *containerURL = [gmailApp.groupContainerURLs objectForKey:@"group.com.google.Gmail"];
 	if (!containerURL) {
+		NSLog(@"[Gmailer] Error: Could not find Gmail groupContainerURLs");
 		return 2;
 	}
 
@@ -30,10 +33,15 @@ static int loadGmailAccounts()
 	NSDictionary *accountIds = [userDefaults objectForKey:@"kGmailSharedStorageSignedInAccountIds"];
 
 	if (!accountIds || accountIds.count == 0) {
+		NSLog(@"[Gmailer] Error: Could not find Gmail kGmailSharedStorageSignedInAccountIds");
 		return 3;
 	}
 
 	// ***from gmailpushenabler by Leonard Hecker (https://gist.github.com/lhecker/00850043b35cf207cafc)
+	iOSGmailAccounts = [[NSMutableArray alloc] init];
+	NSMutableString *emailAddressesNotFound = [[NSMutableString alloc] init];
+	NSMutableArray *trackedAccounts = [[NSMutableArray alloc] init];
+
 	NSMutableArray *accounts = [NSMutableArray arrayWithCapacity:accountIds.count];
 
 	for (NSString *accountId in accountIds) {
@@ -47,36 +55,44 @@ static int loadGmailAccounts()
 			}
 		}
 
+		BOOL match = NO;
+		for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
+			NSString *address = [account firstEmailAddress] ?: nil;
+			if (!address) continue;
+
+			if ([addressSet containsObject:address]) {
+				[iOSGmailAccounts addObject:address];
+				[trackedAccounts addObject:[NSString stringWithFormat:@"%@ -> %@", [addressSet anyObject], [account displayName]]];
+				match = YES;
+				break;
+			}
+		}
+
+		if (!match) {
+			if (emailAddressesNotFound.length) {
+				[emailAddressesNotFound appendString:@"\n"];
+			}
+			[emailAddressesNotFound appendString:[addressSet anyObject]];
+		}
+
 		[accounts addObject:addressSet];
 	}
 
 	sharedGmailAccounts = [accounts copy];
 	// ***
 
-	accounts = nil;
-	accounts = [[NSMutableArray alloc] init];
-	for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
-		NSString *address = [account firstEmailAddress] ?: nil;
-		if (!address) continue;
-
-		BOOL match = NO;
-		for (NSSet *addressSet in sharedGmailAccounts) {
-			if ([addressSet containsObject:address]) {
-				match = YES;
-				break;
-			}
-		}
-
-		if (match) {
-			 [accounts addObject:address];
-		}
-	}
-
-	if (accounts.count == 0) {
+	if (iOSGmailAccounts.count == 0) {
+		NSLog(@"[Gmailer] Error: Could not find iOS Gmail accounts");
 		return 4;
 	}
 
-	iOSGmailAccounts = [accounts copy];
+	[settings setObject:trackedAccounts forKey:@"trackedAccounts"];
+
+	if (emailAddressesNotFound.length) {
+		NSLog(@"[Gmailer] Warning: Some of your Gmail accounts do not have corresponding iOS accounts with the same email address");
+		[settings setObject:emailAddressesNotFound forKey:@"message"];
+		return 5;
+	}
 
 	TweakLog(@"loadGmailAccounts\n%@\n%@", iOSGmailAccounts, sharedGmailAccounts);
 
@@ -90,49 +106,9 @@ static int loadGmailAccounts()
 	%orig;
 
 	dispatch_async(dispatch_get_main_queue(), ^{
+		settings = [[NSMutableDictionary alloc] init];
 		int result = loadGmailAccounts();
-
-		NSMutableString *emailAddresses = [[NSMutableString alloc] init];
-		if (result == 0) {
-			for (NSSet *addressSet in sharedGmailAccounts) {
-				BOOL match = NO;
-				for (NSString *address in iOSGmailAccounts) {
-					if ([addressSet containsObject:address]) {
-						match = YES;
-						break;
-					}
-				}
-
-				if (!match) {
-					if (emailAddresses.length) {
-						[emailAddresses appendString:@"\n"];
-					}
-					[emailAddresses appendString:[addressSet anyObject]];
-				}
-			}
-
-			if (emailAddresses.length) {
-				result = 5;
-			}
-		}
-
-		NSMutableDictionary *settings = [[NSMutableDictionary alloc] init];
-		if (result != 0) {
-			if (result == 1) {
-				NSLog(@"[Gmailer] Error: Could not find Gmail application");
-			} else if (result == 2) {
-				NSLog(@"[Gmailer] Error: Could not find Gmail groupContainerURLs");
-			} else if (result == 3) {
-				NSLog(@"[Gmailer] Error: Could not find Gmail kGmailSharedStorageSignedInAccountIds");
-			} else if (result == 4) {
-				NSLog(@"[Gmailer] Error: Could not find iOS Gmail accounts");
-			} else if (result == 5) {
-				NSLog(@"[Gmailer] Warning: Some of your Gmail accounts do not have corresponding iOS accounts with the same email address");
-				[settings setObject:emailAddresses forKey:@"message"];
-			}
-
-			[settings setObject:@(result) forKey:@"result"];
-		}
+		[settings setObject:@(result) forKey:@"result"];
 		[settings writeToFile:plistfile atomically:YES];
 	});
 }

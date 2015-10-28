@@ -4,6 +4,7 @@ Depends: firmware (>=8.0), mobilesubstrate
 Version: 1.0.0~beta3c
 Architecture: iphoneos-arm
 Description: Automatically fetch mail in the stock iOS Mail App for Gmail accounts using the Push controller from the Gmail App.
+Depiction: http://www.tateu.net/repo/html/gmailer.htm
 Maintainer: tateu (Josh Harris) <tateu@tateu.net>
 Author: tateu (Josh Harris) <tateu@tateu.net>
 Section: Tweaks
