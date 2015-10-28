@@ -1,7 +1,7 @@
 #import <Foundation/NSDistributedNotificationCenter.h>
 #import "headers.h"
 
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define TweakLog(fmt, ...) NSLog((@"[Gmailer] [Line %d]: "  fmt), __LINE__, ##__VA_ARGS__)
 #else
@@ -56,8 +56,19 @@ static int loadGmailAccounts()
 	accounts = nil;
 	accounts = [[NSMutableArray alloc] init];
 	for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
-		if ([account isKindOfClass:%c(GmailAccount)]) {
-			[accounts addObject:[account firstEmailAddress]];
+		NSString *address = [account firstEmailAddress] ?: nil;
+		if (!address) continue;
+
+		BOOL match = NO;
+		for (NSSet *addressSet in sharedGmailAccounts) {
+			if ([addressSet containsObject:address]) {
+				match = YES;
+				break;
+			}
+		}
+
+		if (match) {
+			 [accounts addObject:address];
 		}
 	}
 
@@ -83,9 +94,9 @@ static int loadGmailAccounts()
 
 		NSMutableString *emailAddresses = [[NSMutableString alloc] init];
 		if (result == 0) {
-			for (NSString *address in iOSGmailAccounts) {
+			for (NSSet *addressSet in sharedGmailAccounts) {
 				BOOL match = NO;
-				for (NSSet *addressSet in sharedGmailAccounts) {
+				for (NSString *address in iOSGmailAccounts) {
 					if ([addressSet containsObject:address]) {
 						match = YES;
 						break;
@@ -94,9 +105,9 @@ static int loadGmailAccounts()
 
 				if (!match) {
 					if (emailAddresses.length) {
-						[emailAddresses appendString:@","];
+						[emailAddresses appendString:@"\n"];
 					}
-					[emailAddresses appendString:address];
+					[emailAddresses appendString:[addressSet anyObject]];
 				}
 			}
 
@@ -257,10 +268,10 @@ static int loadGmailAccounts()
 							}
 						} else {
 							for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
-								if ([account isKindOfClass:%c(GmailAccount)]) {
+								// if ([account isKindOfClass:%c(GmailAccount)]) {
 									TweakLog(@"Fetch All %@", account);
 									[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
-								}
+								// }
 							}
 						}
 

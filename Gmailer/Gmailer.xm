@@ -17,7 +17,7 @@ static NSMutableDictionary *settings;
 	NSMutableArray *activeAccounts;
 }
 - (void)fetchForAccount:(id)sender;
-// - (void)showResultMessage:(id)sender;
+- (void)showResultMessage:(id)sender;
 @end
 
 @implementation GmailerListController
@@ -31,10 +31,24 @@ static NSMutableDictionary *settings;
 	}
 }
 
-// - (void)showResultMessage:(PSSpecifier *)specifier
-// {
-// 	UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:title message:[NSString stringWithFormat:@"message] delegate:self cancelButtonTitle:@"Ok" otherButtonTitles:nil];
-// }
+- (void)showResultMessage:(PSSpecifier *)specifier
+{
+	NSString *message;
+	int index = [specifier propertyForKey:@"index"] ? [[specifier propertyForKey:@"index"] intValue] : -1;
+	if (index == 1) {
+		message = @"It appears that the Gmail app is not installed on your device.\n\nYou should install it, open it, then configure and log into your accounts, then respring.\n\nThis is a fatal error.";
+	} else if (index == 2) {
+		message = @"It appears that the Gmail app is not setup correctly (groupContainerURLs not found).\n\nYou should open it, then configure and log into your accounts, then respring.\n\nThis is a fatal error.";
+	} else if (index == 3) {
+		message = @"It appears that you have not configured and enabled any accounts in the Gmail app.\n\nYou should open it, then configure and log into your accounts, then respring.\n\nThis is a fatal error.";
+	} else if (index == 4) {
+		message = @"It appears that you do not have any iOS mail accounts configured and enabled that match what is set up in the Gmail app.\nYou should go to 'Settings -> Mail, Contacts, Calendars', add and configure your accounts, then respring.\n\nThis is a fatal error.";
+	} else if (index == 5) {
+		message = [NSString stringWithFormat:@"It appears that you have some accounts configured in the Gmail app that are not also configured in iOS.\nSome of your accounts will not work.\n\n%@", [specifier propertyForKey:@"label"]];
+	}
+	UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:@"Gmailer" message:message delegate:self cancelButtonTitle:@"Ok" otherButtonTitles:nil];
+	[alertView show];
+}
 
 - (id)specifiers
 {
@@ -69,7 +83,7 @@ static NSMutableDictionary *settings;
 			} else if (result == 4) {
 				title = @"No iOS Gmail accounts are enabled";
 			} else if (result == 5) {
-				title = [NSString stringWithFormat:@"Some Gmail accounts do not match iOS accounts (%@)", settings[@"message"]];
+				title = [NSString stringWithFormat:@"Some Gmail accounts do not match iOS accounts"];
 			}
 
 			specifier = [PSSpecifier preferenceSpecifierNamed:title
@@ -77,12 +91,12 @@ static NSMutableDictionary *settings;
 														   set:nil
 														   get:nil
 														detail:nil
-														  cell:PSStaticTextCell //PSButtonCell
+														  cell:PSButtonCell //PSStaticTextCell PSButtonCell
 														  edit:nil];
 
-			// specifier->action = @selector(showResultMessage:);
+			specifier->action = @selector(showResultMessage:);
 			[specifier setProperty:title forKey:@"title"];
-			[specifier setProperty:title forKey:@"label"];
+			if (result == 5) [specifier setProperty:settings[@"message"] forKey:@"label"];
 			[specifier setProperty:@(result) forKey:@"index"];
 
 			[(NSMutableArray *)_specifiers addObject:specifier];
