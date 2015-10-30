@@ -88,7 +88,7 @@ static NSMutableDictionary *settings;
 				[(NSMutableArray *)_specifiers insertObject:specifier atIndex:0];
 
 				if (result == 1) {
-					title = @"Gmail App not found";
+					title = @"Gmail App not configured";
 				} else if (result == 2) {
 					title = @"Gmail App not installed correctly";
 				} else if (result == 3) {
@@ -226,7 +226,7 @@ static NSMutableDictionary *settings;
 {
 	PSControlTableCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
 	if ([cell isKindOfClass:%c(PSSwitchTableCell)]) {
-		if (indexPath.section == 2 && indexPath.row == 0) {
+		if (indexPath.section == 1 && indexPath.row == 0) {
 			int result = settings[@"result"] ? [settings[@"result"] intValue] : 1;
 			UISwitch *contactSwitch = (UISwitch *)cell.control;
 			if (result == 5) {

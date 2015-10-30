@@ -3,7 +3,7 @@
 #import <rocketbootstrap.h>
 #import "headers.h"
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
 #define TweakLog(fmt, ...) NSLog((@"[Gmailer] [Line %d]: "  fmt), __LINE__, ##__VA_ARGS__)
 #else
@@ -32,16 +32,16 @@ static int loadGmailAccounts()
 	NSMutableArray *trackedAccounts = [[NSMutableArray alloc] init];
 
 	for (NSString *key in gmailAccounts) {
-	    NSString *gmailAddress = [[gmailAccounts objectForKey:key] lowercaseString];
+	    NSString *gmailAddress = [gmailAccounts objectForKey:key];
 
 		BOOL match = NO;
 		for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
 			NSString *address = [account firstEmailAddress] ?: nil;
 			if (!address) continue;
 
-			if ([gmailAddress isEqualToString:[address lowercaseString]]) {
+			if ([gmailAddress isEqualToString:address]) {
 				[accounts addObject:address];
-				[trackedAccounts addObject:[NSString stringWithFormat:@"%@ -> %@", [gmailAccounts objectForKey:key], [account displayName]]];
+				[trackedAccounts addObject:[NSString stringWithFormat:@"%@ -> %@", gmailAddress, [account displayName]]];
 				match = YES;
 				break;
 			}
@@ -51,7 +51,8 @@ static int loadGmailAccounts()
 			if (emailAddressesNotFound.length) {
 				[emailAddressesNotFound appendString:@"\n"];
 			}
-			[emailAddressesNotFound appendString:[gmailAccounts objectForKey:key]];
+
+			[emailAddressesNotFound appendString:gmailAddress];
 		}
 	}
 
@@ -80,16 +81,23 @@ static int loadGmailAccounts()
 %new
 - (void)gmailerMessageNamed:(NSString *)name withUserInfo:(NSDictionary *)userInfo
 {
-	[settings removeObjectForKey:@"trackedAccounts"];
-	[settings removeObjectForKey:@"message"];
-	[settings setObject:userInfo forKey:@"GmailAccounts"];
-	int result = loadGmailAccounts();
-	if (!iOSMailAccounts) {
-		iOSMailAccounts = [[NSMutableArray alloc] init];
+	if ([name isEqualToString:@"updateGmailAccounts"] || [name isEqualToString:@"relinkEmailAccounts"]) {
+		[settings removeObjectForKey:@"trackedAccounts"];
+		[settings removeObjectForKey:@"message"];
+
+		if ([name isEqualToString:@"updateGmailAccounts"]) {
+			[settings setObject:userInfo forKey:@"GmailAccounts"];
+		}
+
+		int result = loadGmailAccounts();
+		if (!iOSMailAccounts) {
+			iOSMailAccounts = [[NSMutableArray alloc] init];
+		}
+
+		[settings setObject:@(result) forKey:@"result"];
+		[settings setObject:iOSMailAccounts forKey:@"iOSMailAccounts"];
+		[settings writeToFile:plistfile atomically:YES];
 	}
-	[settings setObject:@(result) forKey:@"result"];
-	[settings setObject:iOSMailAccounts forKey:@"iOSMailAccounts"];
-	[settings writeToFile:plistfile atomically:YES];
 }
 
 -(void)applicationDidFinishLaunching:(id)application
@@ -97,15 +105,11 @@ static int loadGmailAccounts()
 	%orig;
 
 	dispatch_async(dispatch_get_main_queue(), ^{
-		[settings removeObjectForKey:@"trackedAccounts"];
-		[settings removeObjectForKey:@"message"];
-		int result = loadGmailAccounts();
-		[settings setObject:@(result) forKey:@"result"];
-		if (!iOSMailAccounts) {
-			iOSMailAccounts = [[NSMutableArray alloc] init];
-		}
-		[settings setObject:iOSMailAccounts forKey:@"iOSMailAccounts"];
-		[settings writeToFile:plistfile atomically:YES];
+		[self gmailerMessageNamed:@"relinkEmailAccounts" withUserInfo:nil];
+
+		[[NSDistributedNotificationCenter defaultCenter] addObserverForName:@"net.tateu.gmailer/relinkEmailAccounts" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *notification) {
+			[self gmailerMessageNamed:@"relinkEmailAccounts" withUserInfo:nil];
+		}];
 
 		CPDistributedMessagingCenter *c = [CPDistributedMessagingCenter centerNamed:@"net.tateu.gmailer"];
 		rocketbootstrap_distributedmessagingcenter_apply(c);
@@ -120,6 +124,9 @@ static int loadGmailAccounts()
 - (void)GAUpdateTimerFired:(PCSimpleTimer *)timer
 {
 	TweakLog(@"Fetch GAUpdateTimerFired\n%@", timer.userInfo[@"emailAddresses"]);
+
+	// Should we ping the Mail app to wake it up?
+	// BOOL ret = [[%c(SBBackgroundMultitaskingManager) sharedInstance] _launchAppForUpdating:@"com.apple.mobilemail" trigger:1 pushNotificationUserInfo:nil withWatchdoggableCompletion:nil];
 
 	[[NSDistributedNotificationCenter defaultCenter] postNotificationName:@"net.tateu.gmailer/fetchAccount" object:nil userInfo:@{@"sender" : @"Automatic", @"emailAddresses" : [[timer.userInfo[@"emailAddresses"] allObjects] componentsJoinedByString:@","]}];
 
@@ -159,7 +166,14 @@ static int loadGmailAccounts()
 		NSDictionary *APSMessageUserInfo = info[@"APSMessageUserInfo"];
 
 		if (settings[@"GmailAccounts"] && settings[@"GmailAccounts"] > 0 && APSMessageUserInfo[@"a"]) {
-			emailAddress = [settings[@"GmailAccounts"] objectForKey:APSMessageUserInfo[@"a"]];
+			NSString *gmailAddress = [settings[@"GmailAccounts"] objectForKey:APSMessageUserInfo[@"a"]];
+
+			for (NSString *accountAddress in iOSMailAccounts) {
+				if ([accountAddress isEqualToString:gmailAddress]) {
+					emailAddress = accountAddress;
+					break;
+				}
+			}
 		}
 
 		NSDate *fireDate = [NSDate dateWithTimeIntervalSinceNow:10];
@@ -174,6 +188,10 @@ static int loadGmailAccounts()
 
 		if (emailAddress) {
 			[emailAddresses addObject:emailAddress];
+		} else {
+			for (NSString *accountAddress in iOSMailAccounts) {
+				[emailAddresses addObject:accountAddress];
+			}
 		}
 
 		updateTimer = [[%c(PCSimpleTimer) alloc] initWithFireDate:fireDate serviceIdentifier:@"net.tateu.gmailer" target:self selector:@selector(GAUpdateTimerFired:) userInfo:@{@"fireDate" : fireDate, @"emailAddresses" : emailAddresses}];
@@ -189,35 +207,64 @@ static int loadGmailAccounts()
 
 %group MailGroup
 %hook MailAppController
+%new
+- (void)gmailerMessageNamed:(NSString *)name withUserInfo:(NSDictionary *)userInfo
+{
+	NSString *sender = userInfo[@"sender"];
+	AutoFetchController *autoFetchController = [%c(AutoFetchController) sharedController];
+
+	if ([sender isEqualToString:@"Automatic"]) {
+		BOOL alwaysFetchAll = settings[@"alwaysFetchAll"] ? [settings[@"alwaysFetchAll"] boolValue] : NO;
+		NSMutableSet *accountsToFetch = [[NSMutableSet alloc] init];
+		NSArray *emailAddresses = [userInfo[@"emailAddresses"] componentsSeparatedByString:@","];
+
+		if (!alwaysFetchAll && emailAddresses && emailAddresses.count > 0) {
+			for (NSString *emailAddress in emailAddresses) {
+				MailAccount *account = [%c(MailAccount) accountContainingEmailAddress:emailAddress];
+
+				if (account) {
+					TweakLog(@"Fetch List %@", account);
+					[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
+				}
+			}
+		} else if (settings[@"iOSMailAccounts"]) {
+			for (MailAccount *address in settings[@"iOSMailAccounts"]) {
+				MailAccount *account = [%c(MailAccount) accountContainingEmailAddress:address];
+				if (account) {
+					TweakLog(@"Fetch iOSMailAccounts %@", account);
+					[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
+				}
+			}
+		} else {
+			for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
+				// if ([account isKindOfClass:%c(GmailAccount)]) {
+					TweakLog(@"Fetch All %@", account);
+					[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
+				// }
+			}
+		}
+
+		if (accountsToFetch.count > 0) {
+			[autoFetchController fetchNow:126 withSources:accountsToFetch];
+		}
+	} else {
+		MailAccount *account = [%c(MailAccount) accountWithUniqueId:sender];
+		TweakLog(@"Fetch Preferences %@", account);
+		MailboxSource *source = [[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]];
+		[autoFetchController fetchNow:126 withSources:@[source]];
+	}
+}
+
 -(BOOL)application:(id)arg1 didFinishLaunchingWithOptions:(id)arg2
 {
 	BOOL ret = %orig;
+
 	TweakLog(@"didFinishLaunchingWithOptions");
-	if (settings) {
-		if ((settings[@"enabled"] && ![settings[@"enabled"] boolValue]) || (settings[@"fetchOnRestart"] && ![settings[@"fetchOnRestart"] boolValue])) {
-			return ret;
-		}
+	[self gmailerMessageNamed:@"fetchAccount" withUserInfo:@{@"sender" : @"Automatic"}];
 
-		NSMutableSet *accountsToFetch = [[NSMutableSet alloc] init];
-		if (settings[@"iOSMailAccounts"]) {
-		   for (MailAccount *address in settings[@"iOSMailAccounts"]) {
-			   MailAccount *account = [%c(MailAccount) accountContainingEmailAddress:address];
-			   if (account) {
-				   TweakLog(@"Fetch iOSMailAccounts %@", account);
-				   [accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
-			   }
-		   }
-	   } else {
-		   for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
-			   // if ([account isKindOfClass:%c(GmailAccount)]) {
-				   TweakLog(@"Fetch All %@", account);
-				   [accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
-			   // }
-		   }
-	   }
-
-	   [[objc_getClass("AutoFetchController") sharedController] fetchNow:126 withSources:accountsToFetch];
-	}
+	[[NSDistributedNotificationCenter defaultCenter] addObserverForName:@"net.tateu.gmailer/fetchAccount" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *notification) {
+		[self gmailerMessageNamed:@"fetchAccount" withUserInfo:@{@"sender" : @"Automatic", @"emailAddresses" : notification.userInfo[@"emailAddresses"] ?: @""}];
+	}];
 
 	return ret;
 }
@@ -288,17 +335,6 @@ static void SettingsChanged(CFNotificationCenterRef center, void *observer, CFSt
 			LoadSettings();
 			%init(SpringBoardGroup);
 			CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, SettingsChanged, CFSTR(PreferencesChangedNotification), NULL, CFNotificationSuspensionBehaviorCoalesce);
-			[[NSDistributedNotificationCenter defaultCenter] addObserverForName:@"net.tateu.gmailer/relinkEmailAccounts" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *notification) {
-				[settings removeObjectForKey:@"trackedAccounts"];
-				[settings removeObjectForKey:@"message"];
-				int result = loadGmailAccounts();
-				[settings setObject:@(result) forKey:@"result"];
-				if (!iOSMailAccounts) {
-					iOSMailAccounts = [[NSMutableArray alloc] init];
-				}
-				[settings setObject:iOSMailAccounts forKey:@"iOSMailAccounts"];
-				[settings writeToFile:plistfile atomically:YES];
-			}];
 		} else {
 			NSString *bundleIdentifier = [NSBundle mainBundle].bundleIdentifier;
 
@@ -306,52 +342,6 @@ static void SettingsChanged(CFNotificationCenterRef center, void *observer, CFSt
 				LoadSettings();
 				%init(MailGroup);
 				CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, SettingsChanged, CFSTR(PreferencesChangedNotification), NULL, CFNotificationSuspensionBehaviorCoalesce);
-
-				[[NSDistributedNotificationCenter defaultCenter] addObserverForName:@"net.tateu.gmailer/fetchAccount" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *notification) {
-					NSString *sender = notification.userInfo[@"sender"];
-					AutoFetchController *autoFetchController = [objc_getClass("AutoFetchController") sharedController];
-
-					if ([sender isEqualToString:@"Automatic"]) {
-						BOOL alwaysFetchAll = settings[@"alwaysFetchAll"] ? [settings[@"alwaysFetchAll"] boolValue] : NO;
-						NSMutableSet *accountsToFetch = [[NSMutableSet alloc] init];
-						NSArray *emailAddresses = [notification.userInfo[@"emailAddresses"] componentsSeparatedByString:@","];
-
-						if (!alwaysFetchAll && emailAddresses && emailAddresses.count > 0) {
-							for (NSString *emailAddress in emailAddresses) {
-								MailAccount *account = [%c(MailAccount) accountContainingEmailAddress:emailAddress];
-
-								if (account) {
-									TweakLog(@"Fetch List %@", account);
-									[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
-								}
-							}
-						} else if (settings[@"iOSMailAccounts"]) {
-							for (MailAccount *address in settings[@"iOSMailAccounts"]) {
-								MailAccount *account = [%c(MailAccount) accountContainingEmailAddress:address];
-								if (account) {
-									TweakLog(@"Fetch iOSMailAccounts %@", account);
-									[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
-								}
-							}
-						} else {
-							for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
-								// if ([account isKindOfClass:%c(GmailAccount)]) {
-									TweakLog(@"Fetch All %@", account);
-									[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
-								// }
-							}
-						}
-
-						if (accountsToFetch.count > 0) {
-							[autoFetchController fetchNow:126 withSources:accountsToFetch];
-						}
-					} else {
-						MailAccount *account = [%c(MailAccount) accountWithUniqueId:sender];
-						TweakLog(@"Fetch Preferences %@", account);
-						MailboxSource *source = [[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]];
-						[autoFetchController fetchNow:126 withSources:@[source]];
-					}
-				}];
 			} else if ([bundleIdentifier isEqualToString:@"com.google.Gmail"]) {
 				%init(GmailGroup);
 			}

@@ -1,3 +1,17 @@
+@interface SpringBoard
+@end
+
+@interface SpringBoard (Gmailer)
+- (void)gmailerMessageNamed:(NSString *)name withUserInfo:(NSDictionary *)userInfo;
+@end
+
+@interface MailAppController : UIApplication
+@end
+
+@interface MailAppController (Gmailer)
+- (void)gmailerMessageNamed:(NSString *)name withUserInfo:(NSDictionary *)userInfo;
+@end
+
 @interface LSResourceProxy : NSObject
 @end
 
