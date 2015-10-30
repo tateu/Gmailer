@@ -94,7 +94,7 @@ static NSMutableDictionary *settings;
 															   set:nil
 															   get:nil
 															detail:nil
-															  cell:PSButtonCell //PSStaticTextCell PSButtonCell
+															  cell:PSButtonCell
 															  edit:nil];
 
 				[(NSMutableArray *)_specifiers addObject:specifier];
@@ -145,6 +145,7 @@ static NSMutableDictionary *settings;
 													detail:nil
 													  cell:PSGroupCell
 													  edit:nil];
+		[specifier setProperty:@"***This setting causes Gmailer to fetch all tracked accounts upon receiving any push notification for the Gmail app. This may help you if Gmailer is not properly associating notifications with your accounts or if Gmail itself is having technical issues.\n\n***This is off by default because it may unnecessarily increase network activity, somewhat increasing battery usage." forKey:@"footerText"];
 
 		[(NSMutableArray *)_specifiers addObject:specifier];
 
@@ -211,5 +212,21 @@ static NSMutableDictionary *settings;
 	if (!plistValue) plistValue = defaultValue;
 
 	return plistValue;
+}
+
+- (id)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+	PSControlTableCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+	if ([cell isKindOfClass:%c(PSSwitchTableCell)]) {
+		if (indexPath.section == 0 && indexPath.row == 0) {
+			UISwitch *contactSwitch = (UISwitch *)cell.control;
+			contactSwitch.onTintColor = [UIColor redColor];
+		} else if (indexPath.section == 0 && indexPath.row == 1) {
+			UISwitch *contactSwitch = (UISwitch *)cell.control;
+			contactSwitch.onTintColor = [UIColor blackColor];
+		}
+	}
+
+	return cell;
 }
 @end

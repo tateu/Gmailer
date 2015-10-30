@@ -4,6 +4,34 @@
 <dict>
 	<key>items</key>
 	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>Enabled</string>
+			<key>key</key>
+			<string>enabled</string>
+			<key>default</key>
+			<true/>
+			<key>PostNotification</key>
+			<string>net.tateu.gmailer/preferences</string>
+			<key>defaults</key>
+			<string>net.tateu.gmailer</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>Fetch All Accounts upon Any Notification***</string>
+			<key>key</key>
+			<string>alwaysFetchAll</string>
+			<key>default</key>
+			<false/>
+			<key>PostNotification</key>
+			<string>net.tateu.gmailer/preferences</string>
+			<key>defaults</key>
+			<string>net.tateu.gmailer</string>
+		</dict>
 	</array>
 	<key>title</key>
 	<string>Gmailer</string>
