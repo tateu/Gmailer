@@ -6,6 +6,16 @@
 	<array>
 		<dict>
 			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>Options</string>
+			<key>footerText</key>
+			<string>*This setting causes Gmailer to fetch all tracked accounts upon receiving any push notification for the Gmail app. This may help you if Gmailer is not properly associating notifications with your accounts or if Gmail itself is having technical issues.
+
+This is off by default because it may unnecessarily increase network activity, somewhat increasing battery usage.</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>label</key>
 			<string>Enabled</string>
@@ -22,7 +32,7 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>label</key>
-			<string>Fetch All Accounts upon Any Notification***</string>
+			<string>Always Fetch All Accounts*</string>
 			<key>key</key>
 			<string>alwaysFetchAll</string>
 			<key>default</key>
@@ -31,6 +41,28 @@
 			<string>net.tateu.gmailer/preferences</string>
 			<key>defaults</key>
 			<string>net.tateu.gmailer</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>Auto Fetch on Restart</string>
+			<key>key</key>
+			<string>fetchOnRestart</string>
+			<key>default</key>
+			<true/>
+			<key>PostNotification</key>
+			<string>net.tateu.gmailer/preferences</string>
+			<key>defaults</key>
+			<string>net.tateu.gmailer</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSButtonCell</string>
+			<key>label</key>
+			<string>Relink Email Accounts</string>
+			<key>action</key>
+			<string>relinkEmailAccounts</string>
 		</dict>
 	</array>
 	<key>title</key>

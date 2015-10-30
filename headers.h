@@ -9,6 +9,11 @@
 + (id)applicationProxyForIdentifier:(id)arg1;
 @end
 
+@interface SBBackgroundMultitaskingManager :NSObject
++ (id)sharedInstance;
+- (BOOL)_launchAppForUpdating:(id)arg1 trigger:(NSUInteger)arg2 pushNotificationUserInfo:(id)arg3 withWatchdoggableCompletion:(/*^block*/id)arg4;
+@end
+
 @interface NSUserDefaults (Private)
 - (instancetype)_initWithSuiteName:(NSString *)suiteName container:(NSURL *)container;
 @end
@@ -21,6 +26,13 @@
 - (void)invalidate;
 - (void)scheduleInRunLoop:(id)arg1;
 @end
+
+
+@interface GmailAccountManager : NSObject
+- (id)userEmailsForAccounts;
+- (NSInteger)fetchOrAssignUniqueIdForEmail:(id)arg1;
+@end
+
 
 @interface GenericSource : NSObject
 @end

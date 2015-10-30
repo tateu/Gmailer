@@ -10,6 +10,8 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = Gmailer
 Gmailer_FILES = Tweak.xm
+Gmailer_PRIVATE_FRAMEWORKS = AppSupport
+Gmailer_LDFLAGS += -lrocketbootstrap
 ADDITIONAL_CFLAGS = -fobjc-arc
 
 include $(THEOS_MAKE_PATH)/tweak.mk
