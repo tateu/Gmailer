@@ -47,6 +47,11 @@
 - (NSInteger)fetchOrAssignUniqueIdForEmail:(id)arg1;
 @end
 
+@interface SharedStorageManager : NSObject
++ (id)sharedStorage;
+@property(retain, nonatomic) NSUserDefaults *userDefaults;
+@end
+
 
 @interface GenericSource : NSObject
 @end
