@@ -14,7 +14,6 @@
 #define plistfile @"/var/mobile/Library/Preferences/net.tateu.gmailer.plist"
 #define PreferencesChangedNotification "net.tateu.gmailer/preferences"
 static NSMutableDictionary *settings = nil;
-static NSMutableDictionary *gmailAccounts = nil;
 static NSMutableDictionary *iOSMailAccounts = nil;
 static PCSimpleTimer *updateTimer = nil;
 
@@ -22,23 +21,10 @@ static CPDistributedMessagingCenter *gmailerClient = nil;
 
 static int loadGmailAccounts()
 {
-	NSDictionary *userInfo = [settings objectForKey:@"GmailAccounts"];
-	if (!userInfo || userInfo.count == 0) {
+	NSDictionary *gmailAccounts = [settings objectForKey:@"GmailAccounts"];
+	if (!gmailAccounts || gmailAccounts.count == 0) {
 		NSLog(@"[Gmailer] Error: Could not find Gmail application");
 		return 1;
-	}
-
-	gmailAccounts = nil;
-	gmailAccounts = [[NSMutableDictionary alloc] init];
-	for (NSString *key in userInfo) {
-		NSArray *addresses = [[userInfo objectForKey:key] componentsSeparatedByString:@","];
-		NSMutableSet *addressSet = [NSMutableSet setWithCapacity:addresses.count];
-
-		for (NSString *address in addresses) {
-			[addressSet addObject:address];
-		}
-
-		[gmailAccounts setObject:addressSet forKey:key];
 	}
 
 	TweakLog(@"gmailerMessageNamed updateGmailAccounts\n%@", gmailAccounts);
@@ -48,16 +34,19 @@ static int loadGmailAccounts()
 	NSMutableArray *trackedAccounts = [[NSMutableArray alloc] init];
 
 	for (NSString *key in gmailAccounts) {
-	    NSSet *addressSet = [gmailAccounts objectForKey:key];
+	    NSString *gmailAddress = [gmailAccounts objectForKey:key];
 
 		BOOL match = NO;
 		for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
 			NSString *address = [account firstEmailAddress] ?: nil;
 			if (!address) continue;
 
-			if ([addressSet containsObject:address]) {
+			NSString *username = [account username];
+			TweakLog(@"gmailerMessageNamed updateGmailAccounts %@ - %@ - %@", gmailAddress, username, address);
+
+			if ((username && [gmailAddress isEqualToString:username]) || ([gmailAddress isEqualToString:address])) {
 				[accounts setObject:address forKey:key];
-				[trackedAccounts addObject:[NSString stringWithFormat:@"%@ -> %@", [addressSet anyObject], [account displayName]]];
+				[trackedAccounts addObject:[NSString stringWithFormat:@"%@ -> %@", gmailAddress, [account displayName]]];
 				match = YES;
 				break;
 			}
@@ -68,7 +57,7 @@ static int loadGmailAccounts()
 				[emailAddressesNotFound appendString:@"\n"];
 			}
 
-			[emailAddressesNotFound appendString:[addressSet anyObject]];
+			[emailAddressesNotFound appendString:gmailAddress];
 		}
 	}
 
@@ -199,7 +188,7 @@ static int loadGmailAccounts()
 		if (emailAddress) {
 			[emailAddresses addObject:emailAddress];
 		} else {
-			for (NSString *accountAddress in iOSMailAccounts) {
+			for (NSString *accountAddress in [iOSMailAccounts allValues]) {
 				[emailAddresses addObject:accountAddress];
 			}
 		}
@@ -238,8 +227,7 @@ static int loadGmailAccounts()
 				}
 			}
 		} else if (settings[@"iOSMailAccounts"]) {
-			for (NSString *key in settings[@"iOSMailAccounts"]) {
-				NSString *address = [settings[@"iOSMailAccounts"] objectForKey:key];
+			for (NSString *address in [settings[@"iOSMailAccounts"] allValues]) {
 				MailAccount *account = [%c(MailAccount) accountContainingEmailAddress:address];
 				if (account) {
 					TweakLog(@"Fetch iOSMailAccounts %@", account);
@@ -315,33 +303,9 @@ static int loadGmailAccounts()
 	%orig;
 
 	NSMutableDictionary *accountMap = [[NSMutableDictionary alloc] init];
-
-	SharedStorageManager *_sharedStorageManager = [%c(SharedStorageManager) sharedStorage];
-	NSUserDefaults *userDefaults = _sharedStorageManager.userDefaults;
-	NSArray *accountIds = [userDefaults objectForKey:@"kGmailSharedStorageSignedInAccountIds"];
-
-	for (NSString *accountId in accountIds) {
-		TweakLog(@"loadGmailAccount %@", accountId);
-		NSString *accountKey = [@"kGmailSharedStorageAddresses_" stringByAppendingString:accountId];
-		NSArray *accountAddresses = [userDefaults objectForKey:accountKey];
-		NSMutableSet *addressSet = [NSMutableSet setWithCapacity:accountAddresses.count];
-
-		for (NSArray *addressInfo in accountAddresses) {
-			if (addressInfo.count == 2) {
-				[addressSet addObject:addressInfo[1]];
-			}
-		}
-
-		for (NSString *address in [self userEmailsForAccounts]) {
-			if ([addressSet containsObject:address]) {
-				// GoogleMailAccount *account = [self accountWithEmail:address];
-				// NSInteger uniqueId = account.accountId;
-				NSInteger uniqueId = [self fetchOrAssignUniqueIdForEmail:address];
-				// NSData *data = [NSKeyedArchiver archivedDataWithRootObject:addressSet];
-				[accountMap setObject:[[addressSet allObjects] componentsJoinedByString:@","] forKey:[NSString stringWithFormat:@"%ld", (long)uniqueId]];
-				break;
-			}
-		}
+	for (NSString *address in [self userEmailsForAccounts]) {
+		NSInteger uniqueId = [self fetchOrAssignUniqueIdForEmail:address];
+		[accountMap setObject:address forKey:[NSString stringWithFormat:@"%ld", (long)uniqueId]];
 	}
 
 	[gmailerClient sendMessageName:@"updateGmailAccounts" userInfo:accountMap];

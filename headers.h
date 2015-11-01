@@ -64,6 +64,7 @@
 @end
 
 @interface MFAccount : NSObject
+@property (nonatomic, retain) NSString *username;
 @end
 
 @interface MailAccount : MFAccount

@@ -56,14 +56,14 @@ This is off by default because it may unnecessarily increase network activity, s
 			<key>defaults</key>
 			<string>net.tateu.gmailer</string>
 		</dict>
-		<dict>
+		<!--<dict>
 			<key>cell</key>
 			<string>PSButtonCell</string>
 			<key>label</key>
 			<string>Relink Email Accounts</string>
 			<key>action</key>
 			<string>relinkEmailAccounts</string>
-		</dict>
+		</dict>-->
 	</array>
 	<key>title</key>
 	<string>Gmailer</string>
