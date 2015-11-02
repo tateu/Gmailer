@@ -49,11 +49,11 @@ static NSMutableDictionary *settings;
 	if (index == 0) {
 		message = [specifier propertyForKey:@"label"];
 	} else if (index == 1) {
-		message = @"Please make sure that the Gmail app is installed, your accounts are configured and make sure you open the app atleast once after installing Gmailer.\n\nThis is a fatal error.";
+		message = @"Please make sure that the Gmail app is installed, your accounts are configured and make sure you open the app atleast once after installing Gmailer.\n\nIf you've recently made changes to any of your iOS Gmail related accounts in Settings -> Mail, Contacts, Calendars, please respring your device.\n\nThis is a fatal error.";
 	} else if (index == 4) {
 		message = @"It appears that you do not have any iOS mail accounts configured and enabled that match what is set up in the Gmail app.\nYou should go to 'Settings -> Mail, Contacts, Calendars', add and configure your accounts, then respring.\n\nThis is a fatal error.";
 	} else if (index == 5) {
-		message = [NSString stringWithFormat:@"It appears that you have some accounts configured in the Gmail app that are not also configured in iOS.\nSome of your accounts will not work.\n\n%@", [specifier propertyForKey:@"label"]];
+		message = [NSString stringWithFormat:@"It appears that you have some accounts configured in the Gmail app that are not configured in iOS.\nSome of your accounts will not work.\n\n%@\n\nIf you've recently made changes to any of your iOS Gmail related accounts in Settings -> Mail, Contacts, Calendars, please respring your device.", [specifier propertyForKey:@"label"]];
 	} else {
 		message = @"Unkown error";
 	}
