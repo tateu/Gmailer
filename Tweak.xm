@@ -167,9 +167,14 @@ static int loadGmailAccounts()
 	}
 
 	if (iOSMailAccounts.count > 0 && info[@"APSMessageTopic"] && [info[@"APSMessageTopic"] isEqualToString:@"com.google.Gmail"]) {
+		TweakLog(@"SpringBoard initWithDictionary xpcMessage\n%@", info);
+		NSDictionary *APSMessageUserInfo = info[@"APSMessageUserInfo"];
+		if (settings[@"newEmailOnly"] && [settings[@"newEmailOnly"] boolValue] && (!APSMessageUserInfo[@"aps"] || !APSMessageUserInfo[@"aps"][@"alert"])) {
+			return %orig;
+		}
+
 		NSMutableSet *emailAddresses = nil;
 		NSString *emailAddress = nil;
-		NSDictionary *APSMessageUserInfo = info[@"APSMessageUserInfo"];
 
 		if (APSMessageUserInfo[@"a"]) {
 			emailAddress = [iOSMailAccounts objectForKey:APSMessageUserInfo[@"a"]];

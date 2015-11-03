@@ -234,7 +234,7 @@ static NSMutableDictionary *settings;
 			} else {
 				contactSwitch.onTintColor = [UIColor redColor];
 			}
-		} else if (/*indexPath.section == 0 &&*/ indexPath.row == 1 || indexPath.row == 2) {
+		} else if (/*indexPath.section == 0 &&*/ indexPath.row == 1 || indexPath.row == 2 || indexPath.row == 3) {
 			UISwitch *contactSwitch = (UISwitch *)cell.control;
 			contactSwitch.onTintColor = [UIColor blackColor];
 		}

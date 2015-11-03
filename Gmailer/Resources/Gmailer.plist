@@ -32,6 +32,20 @@ This is off by default because it may unnecessarily increase network activity, s
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>label</key>
+			<string>New Email Only</string>
+			<key>key</key>
+			<string>newEmailOnly</string>
+			<key>default</key>
+			<false/>
+			<key>PostNotification</key>
+			<string>net.tateu.gmailer/preferences</string>
+			<key>defaults</key>
+			<string>net.tateu.gmailer</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
 			<string>Always Fetch All Accounts*</string>
 			<key>key</key>
 			<string>alwaysFetchAll</string>
