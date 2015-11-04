@@ -2,7 +2,7 @@
 #import <Preferences/Preferences.h>
 #import "../headers.h"
 
-// #define DEBUG
+#define DEBUG
 #ifdef DEBUG
 #define TweakLog(fmt, ...) NSLog((@"[GmailerSettings] [Line %d]: "  fmt), __LINE__, ##__VA_ARGS__)
 #else
@@ -234,7 +234,7 @@ static NSMutableDictionary *settings;
 			} else {
 				contactSwitch.onTintColor = [UIColor redColor];
 			}
-		} else if (/*indexPath.section == 0 &&*/ indexPath.row == 1 || indexPath.row == 2 || indexPath.row == 3) {
+		} else if (/*indexPath.section == 0 &&*/ indexPath.row == 1 || indexPath.row == 2 || indexPath.row == 3 || indexPath.row == 4) {
 			UISwitch *contactSwitch = (UISwitch *)cell.control;
 			contactSwitch.onTintColor = [UIColor blackColor];
 		}
