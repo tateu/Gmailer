@@ -11,11 +11,16 @@
 // #define NSLog(fmt, ...)
 #endif
 
+#define kCFCoreFoundationVersionNumber_iOS_9 1240.10
+
 #define plistfile @"/var/mobile/Library/Preferences/net.tateu.gmailer.plist"
 #define PreferencesChangedNotification "net.tateu.gmailer/preferences"
+static BOOL enabled = YES;
+static BOOL blockGmail = NO;
 static NSMutableDictionary *settings = nil;
 static NSMutableDictionary *iOSMailAccounts = nil;
 static PCSimpleTimer *updateTimer = nil;
+static BBDataProviderManager *dataProviderManager = nil;
 
 static CPDistributedMessagingCenter *gmailerClient = nil;
 
@@ -82,6 +87,18 @@ static int loadGmailAccounts()
 }
 
 %group SpringBoardGroup
+// %hook BBServer
+// - (void)_publishBulletinRequest:(BBBulletinRequest *)bulletin forSectionID:(id)arg2 forDestinations:(unsigned int)arg3 alwaysToLockScreen:(BOOL)arg4
+// {
+// 	if (enabled && blockGmail && [bulletin.sectionID isEqualToString:@"com.google.Gmail"]) {
+// 		TweakLog(@"_publishBulletinRequest gmail\n%@\n%@\n%@", bulletin.title, bulletin.subtitle, bulletin.message);
+// 		// return;
+// 	}
+//
+// 	%orig;
+// }
+// %end
+
 %hook SpringBoard
 %new
 - (void)gmailerMessageNamed:(NSString *)name withUserInfo:(NSDictionary *)userInfo
@@ -162,7 +179,7 @@ static int loadGmailAccounts()
 	//     APSProtocolMessagePriority = 10;
 	// }
 
-	if (settings[@"enabled"] && ![settings[@"enabled"] boolValue]) {
+	if (!enabled) {
 		return %orig;
 	}
 
@@ -170,7 +187,11 @@ static int loadGmailAccounts()
 		TweakLog(@"SpringBoard initWithDictionary xpcMessage\n%@", info);
 		NSDictionary *APSMessageUserInfo = info[@"APSMessageUserInfo"];
 		if (settings[@"newEmailOnly"] && [settings[@"newEmailOnly"] boolValue] && (!APSMessageUserInfo[@"aps"] || !APSMessageUserInfo[@"aps"][@"alert"])) {
-			return %orig;
+			if (blockGmail) {
+				return nil;
+			} else {
+				return %orig;
+			}
 		}
 
 		NSMutableSet *emailAddresses = nil;
@@ -204,10 +225,138 @@ static int loadGmailAccounts()
 		TweakLog(@"xpcMessage (%@)\n%@", APSMessageUserInfo[@"a"], updateTimer.userInfo);
 	}
 
+	if (blockGmail) {
+		return nil;
+	}
+
  	return %orig;
 }
 %end //hook APSIncomingMessage
 %end //group SpringBoardGroup
+
+%group SpringBoardGroup_iOS9
+// %hook UNDefaultDataProvider
+// -(void)noteSectionInfoDidChange:(BBSectionInfo *)sectionInfo
+// {
+// 	%orig;
+//
+// 	if (enabled && blockGmail && dataProviderManager && [self.sectionIdentifier isEqualToString:@"com.google.Gmail"]) {
+// 		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void) {
+// 			BBRemoteDataProvider *remoteDataProvider = [dataProviderManager dataProviderForSectionID:@"com.google.Gmail"];
+// 			TweakLog(@"UNDefaultDataProvider noteSectionInfoDidChange\n%@", remoteDataProvider);
+// 			if (remoteDataProvider) {
+// 				BBSectionInfo *sectionInfo = remoteDataProvider.defaultSectionInfo;
+// 				if (sectionInfo) {
+// 					TweakLog(@"UNDefaultDataProvider noteSectionInfoDidChange 1\n%@", sectionInfo);
+// 					sectionInfo.suppressFromSettings = YES;
+// 					sectionInfo.allowsNotifications = YES;
+// 					sectionInfo.showsInLockScreen = YES;
+// 					sectionInfo.showsInNotificationCenter = YES;
+// 					sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+// 					sectionInfo.alertType = 1; //Banner
+// 					TweakLog(@"UNDefaultDataProvider noteSectionInfoDidChange 2\n%@", sectionInfo);
+// 					[remoteDataProvider setSectionInfo:sectionInfo];
+// 				}
+// 			}
+// 		});
+// 	}
+//
+// 	// %orig(sectionInfo);
+// }
+// %end
+
+%hook BBDataProviderManager
+- (void)loadAllDataProvidersAndPerformMigration:(BOOL)arg1
+{
+	%orig;
+
+	dataProviderManager = self;
+
+	if (enabled && blockGmail) {
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void) {
+			BBRemoteDataProvider *remoteDataProvider = [self dataProviderForSectionID:@"com.google.Gmail"];
+			TweakLog(@"BBDataProviderManager\n%@", remoteDataProvider);
+			if (remoteDataProvider) {
+				BBSectionInfo *sectionInfo = remoteDataProvider.defaultSectionInfo;
+				if (sectionInfo) {
+					TweakLog(@"BBDataProviderManager loadAllDataProviders 1\n%@", sectionInfo);
+					sectionInfo.suppressFromSettings = YES;
+					sectionInfo.allowsNotifications = YES;
+					sectionInfo.showsInLockScreen = YES;
+					sectionInfo.showsInNotificationCenter = YES;
+					sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+					sectionInfo.alertType = 1; //Banner
+					TweakLog(@"BBDataProviderManager loadAllDataProviders 2\n%@", sectionInfo);
+					[remoteDataProvider setSectionInfo:sectionInfo];
+				}
+			}
+		});
+	}
+}
+%end
+%end //group SpringBoardGroup_iOS9
+
+%group SpringBoardGroup_iOS8
+// %hook RLNDataProvider
+// -(void)noteSectionInfoDidChange:(BBSectionInfo *)sectionInfo
+// {
+// 	%orig;
+//
+// 	if (enabled && blockGmail && dataProviderManager && [self.sectionIdentifier isEqualToString:@"com.google.Gmail"]) {
+// 		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void) {
+// 			BBRemoteDataProvider *remoteDataProvider = [dataProviderManager dataProviderForSectionID:@"com.google.Gmail"];
+// 			TweakLog(@"RLNDataProvider noteSectionInfoDidChange\n%@", remoteDataProvider);
+// 			if (remoteDataProvider) {
+// 				BBSectionInfo *sectionInfo = remoteDataProvider.defaultSectionInfo;
+// 				if (sectionInfo) {
+// 					TweakLog(@"RLNDataProvider noteSectionInfoDidChange 1\n%@", sectionInfo);
+// 					sectionInfo.suppressFromSettings = YES;
+// 					sectionInfo.allowsNotifications = YES;
+// 					sectionInfo.showsInLockScreen = YES;
+// 					sectionInfo.showsInNotificationCenter = YES;
+// 					sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+// 					sectionInfo.alertType = 1; //Banner
+// 					TweakLog(@"RLNDataProvider noteSectionInfoDidChange 2\n%@", sectionInfo);
+// 					[remoteDataProvider setSectionInfo:sectionInfo];
+// 				}
+// 			}
+// 		});
+// 	}
+//
+// 	// %orig(sectionInfo);
+// }
+// %end
+
+%hook BBDataProviderManager
+- (void)loadAllDataProviders
+{
+	%orig;
+
+	dataProviderManager = self;
+
+	if (enabled && blockGmail) {
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void) {
+			BBRemoteDataProvider *remoteDataProvider = [self dataProviderForSectionID:@"com.google.Gmail"];
+			TweakLog(@"BBDataProviderManager\n%@", remoteDataProvider);
+			if (remoteDataProvider) {
+				BBSectionInfo *sectionInfo = remoteDataProvider.defaultSectionInfo;
+				if (sectionInfo) {
+					TweakLog(@"BBDataProviderManager loadAllDataProviders 1\n%@", sectionInfo);
+					sectionInfo.suppressFromSettings = YES;
+					sectionInfo.allowsNotifications = YES;
+					sectionInfo.showsInLockScreen = YES;
+					sectionInfo.showsInNotificationCenter = YES;
+					sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+					sectionInfo.alertType = 1; //Banner
+					TweakLog(@"BBDataProviderManager loadAllDataProviders 2\n%@", sectionInfo);
+					[remoteDataProvider setSectionInfo:sectionInfo];
+				}
+			}
+		});
+	}
+}
+%end
+%end //group SpringBoardGroup_iOS8
 
 %group MailGroup
 %hook MailAppController
@@ -353,6 +502,34 @@ static void LoadSettings()
 	if (settings == nil) {
 		settings = [[NSMutableDictionary alloc] init];
 	}
+
+	enabled = settings[@"enabled"] ? [settings[@"enabled"] boolValue] : YES;
+	blockGmail = settings[@"blockGmail"] ? [settings[@"blockGmail"] boolValue] : NO;
+
+	if (%c(SpringBoard) && enabled && dataProviderManager) {
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void) {
+			BBRemoteDataProvider *remoteDataProvider = [dataProviderManager dataProviderForSectionID:@"com.google.Gmail"];
+			TweakLog(@"LoadSettings\n%@", remoteDataProvider);
+			if (remoteDataProvider) {
+				BBSectionInfo *sectionInfo = remoteDataProvider.defaultSectionInfo;
+				if (sectionInfo) {
+					TweakLog(@"LoadSettings 1\n%@", sectionInfo);
+					if (blockGmail) {
+						sectionInfo.suppressFromSettings = YES;
+						sectionInfo.allowsNotifications = YES;
+						sectionInfo.showsInLockScreen = YES;
+						sectionInfo.showsInNotificationCenter = YES;
+						sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+						sectionInfo.alertType = 1; //Banner
+					} else {
+						sectionInfo.suppressFromSettings = NO;
+					}
+					TweakLog(@"LoadSettings 2\n%@", sectionInfo);
+					[remoteDataProvider setSectionInfo:sectionInfo];
+				}
+			}
+		});
+	}
 }
 
 static void SettingsChanged(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
@@ -366,6 +543,12 @@ static void SettingsChanged(CFNotificationCenterRef center, void *observer, CFSt
 		if (%c(SpringBoard)) {
 			LoadSettings();
 			%init(SpringBoardGroup);
+			if (kCFCoreFoundationVersionNumber < kCFCoreFoundationVersionNumber_iOS_9) {
+				%init(SpringBoardGroup_iOS8);
+			} else {
+				%init(SpringBoardGroup_iOS9);
+			}
+
 			CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, SettingsChanged, CFSTR(PreferencesChangedNotification), NULL, CFNotificationSuspensionBehaviorCoalesce);
 		} else {
 			NSString *bundleIdentifier = [NSBundle mainBundle].bundleIdentifier;

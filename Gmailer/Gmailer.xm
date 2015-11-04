@@ -153,7 +153,7 @@ static NSMutableDictionary *settings;
 													detail:nil
 													  cell:PSGroupCell
 													  edit:nil];
-		// [specifier setProperty:@"***This setting causes Gmailer to fetch all tracked accounts upon receiving any push notification for the Gmail app. This may help you if Gmailer is not properly associating notifications with your accounts or if Gmail itself is having technical issues.\n\n***This is off by default because it may unnecessarily increase network activity, somewhat increasing battery usage." forKey:@"footerText"];
+		[specifier setProperty:@"*This setting causes Gmailer to fetch all tracked accounts upon receiving any push notification for the Gmail app.  This may help you if Gmailer is not properly associating notifications with your accounts or if Gmail itself is having technical issues.  This is off by default because it may unnecessarily increase network activity, somewhat increasing battery usage.\n\n**If Gmailer is working when all items are enabled in 'Settings -> Notifications -> Gmail' but is NOT working when those items are disabled, turn this option on.  It will enable most of those items but block notifications from the Gmail app so you don't see or hear them.  The option for 'Settings -> Notifications -> Gmail' will be hidden while this option is enabled." forKey:@"footerText"];
 
 		[(NSMutableArray *)_specifiers addObject:specifier];
 
@@ -234,7 +234,7 @@ static NSMutableDictionary *settings;
 			} else {
 				contactSwitch.onTintColor = [UIColor redColor];
 			}
-		} else if (/*indexPath.section == 0 &&*/ indexPath.row == 1 || indexPath.row == 2 || indexPath.row == 3 || indexPath.row == 4) {
+		} else if (indexPath.row > 0) {
 			UISwitch *contactSwitch = (UISwitch *)cell.control;
 			contactSwitch.onTintColor = [UIColor blackColor];
 		}
