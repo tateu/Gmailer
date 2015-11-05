@@ -92,7 +92,31 @@ static int loadGmailAccounts()
 // {
 // 	if (enabled && blockGmail && [bulletin.sectionID isEqualToString:@"com.google.Gmail"]) {
 // 		TweakLog(@"_publishBulletinRequest gmail\n%@\n%@\n%@", bulletin.title, bulletin.subtitle, bulletin.message);
-// 		// return;
+// 		return;
+// 	}
+//
+// 	%orig;
+// }
+// %end
+//
+// %hook SBBannerController
+// - (void)_presentBannerForContext:(SBUIBannerContext *)context reason:(signed)arg2
+// {
+// 	if (enabled && blockGmail && [context.item isKindOfClass:%c(SBBulletinBannerItem)] && [context.item.seedBulletin.sectionID isEqualToString:@"com.google.Gmail"]) {
+// 		TweakLog(@"_presentBannerForContext gmail\n%@\n%@\n%@", context.item.seedBulletin.title, context.item.seedBulletin.subtitle, context.item.seedBulletin.message);
+// 		return;
+// 	}
+//
+// 	%orig;
+// }
+// %end
+//
+// %hook SBLockScreenNotificationListController
+// - (void)observer:(id)arg1 addBulletin:(id)bulletin forFeed:(unsigned)arg3 playLightsAndSirens:(BOOL)arg4 withReply:(id)arg5
+// {
+// 	if (enabled && blockGmail && [bulletin isKindOfClass:%c(BBBulletin)] && [[bulletin sectionID] isEqualToString:@"com.google.Gmail"]) {
+// 		TweakLog(@"addBulletin gmail\n%@\n%@\n%@", [bulletin title], [bulletin subtitle], [bulletin message]);
+// 		return;
 // 	}
 //
 // 	%orig;
@@ -545,7 +569,7 @@ static void LoadSettings()
 			}
 		});
 
-		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void) {
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void) {
 			SBApplication *app = [[%c(SBApplicationController) sharedInstance] applicationWithBundleIdentifier:@"com.google.Gmail"];
 			if (app) {
 				[app setBadge:@(0)];

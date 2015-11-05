@@ -172,3 +172,11 @@
 
 @interface BBBulletinRequest : BBBulletin
 @end
+
+@interface SBBulletinBannerItem : NSObject
+- (BBBulletin *)seedBulletin;
+@end
+
+@interface SBUIBannerContext : NSObject
+@property(readonly, retain, nonatomic) SBBulletinBannerItem *item;
+@end

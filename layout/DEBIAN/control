@@ -1,7 +1,7 @@
 Package: net.tateu.gmailer
 Name: Gmailer
 Depends: firmware (>=8.0), mobilesubstrate, com.rpetrich.rocketbootstrap
-Version: 1.0.0~beta12
+Version: 1.0.0~beta13
 Architecture: iphoneos-arm
 Description: Automatically fetch mail in the stock iOS Mail App for Gmail accounts using the Push controller from the Gmail App.
 Depiction: http://www.tateu.net/repo/html/gmailer.htm
