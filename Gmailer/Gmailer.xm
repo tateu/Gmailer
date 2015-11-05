@@ -2,7 +2,7 @@
 #import <Preferences/Preferences.h>
 #import "../headers.h"
 
-#define DEBUG
+// #define DEBUG
 #ifdef DEBUG
 #define TweakLog(fmt, ...) NSLog((@"[GmailerSettings] [Line %d]: "  fmt), __LINE__, ##__VA_ARGS__)
 #else
@@ -38,7 +38,40 @@ static NSMutableDictionary *settings;
 	if (index >= 0 && index < [activeAccounts count]) {
 		MailAccount *account = [activeAccounts objectAtIndex:index];
 		TweakLog(@"fetchForAccount %d\n%@\n%@\n%@\n%@", index, specifier, account, [account uniqueIdForPersistentConnection], [account primaryMailboxUid]);
-		[[NSDistributedNotificationCenter defaultCenter] postNotificationName:@"net.tateu.gmailer/fetchAccount" object:nil userInfo:@{@"sender" : [account uniqueIdForPersistentConnection]}];
+
+		NSMutableDictionary *userInfo = [[NSMutableDictionary alloc] init];
+		MailAccount *accountCheck = nil;
+
+		if ([account uniqueIdForPersistentConnection]) {
+			accountCheck = [%c(MailAccount) accountWithUniqueId:[account uniqueIdForPersistentConnection]];
+			if (accountCheck) {
+				[userInfo setObject:@"uniqueId" forKey:@"sender"];
+				[userInfo setObject:[account uniqueIdForPersistentConnection] forKey:@"data"];
+			}
+		}
+
+		if (!accountCheck && [account firstEmailAddress]) {
+			accountCheck = [%c(MailAccount) accountContainingEmailAddress:[account firstEmailAddress]];
+			if (accountCheck) {
+				[userInfo setObject:@"firstEmailAddress" forKey:@"sender"];
+				[userInfo setObject:[account firstEmailAddress] forKey:@"data"];
+			}
+		}
+
+		if (!accountCheck && [account URLString]) {
+			accountCheck = [%c(MailAccount) accountWithURLString:[account URLString]];
+			if (accountCheck) {
+				[userInfo setObject:@"URLString" forKey:@"sender"];
+				[userInfo setObject:[account URLString] forKey:@"data"];
+			}
+		}
+
+		if (accountCheck) {
+			[[NSDistributedNotificationCenter defaultCenter] postNotificationName:@"net.tateu.gmailer/fetchAccount" object:nil userInfo:userInfo];
+		} else {
+			UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:@"Gmailer" message:@"ERROR: Failed to get Account info" delegate:self cancelButtonTitle:@"Ok" otherButtonTitles:nil];
+			[alertView show];
+		}
 	}
 }
 

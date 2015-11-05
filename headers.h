@@ -86,6 +86,7 @@
 - (id)fromEmailAddresses;
 - (id)firstEmailAddress;
 - (id)path;
+- (id)URLString;
 - (id)primaryMailboxUid;
 - (id)uniqueIdForPersistentConnection;
 - (BOOL)canFetch;
@@ -141,6 +142,16 @@
 }
 - (id)sectionIdentifier;
 - (id)defaultSectionInfo;
+@end
+
+@interface SBApplicationController : NSObject
++ (id)sharedInstance;
+- (id)applicationWithBundleIdentifier:(id)arg1;
+@end
+
+@interface SBApplication : NSObject
+- (id)bundleIdentifier;
+- (void)setBadge:(id)arg1;
 @end
 
 @interface BBBulletin : NSObject

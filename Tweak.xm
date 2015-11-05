@@ -99,6 +99,18 @@ static int loadGmailAccounts()
 // }
 // %end
 
+%hook SBApplication
+-(void)setBadge:(id)badge
+{
+	if (enabled && blockGmail && [self.bundleIdentifier isEqualToString:@"com.google.Gmail"]) {
+		TweakLog(@"setBadge %@", self.bundleIdentifier);
+		badge = @(0);
+	}
+
+	%orig(badge);
+}
+%end
+
 %hook SpringBoard
 %new
 - (void)gmailerMessageNamed:(NSString *)name withUserInfo:(NSDictionary *)userInfo
@@ -151,7 +163,7 @@ static int loadGmailAccounts()
 	// Should we ping the Mail app to wake it up?
 	// BOOL ret = [[%c(SBBackgroundMultitaskingManager) sharedInstance] _launchAppForUpdating:@"com.apple.mobilemail" trigger:1 pushNotificationUserInfo:nil withWatchdoggableCompletion:nil];
 
-	[[NSDistributedNotificationCenter defaultCenter] postNotificationName:@"net.tateu.gmailer/fetchAccount" object:nil userInfo:@{@"sender" : @"Automatic", @"emailAddresses" : [[timer.userInfo[@"emailAddresses"] allObjects] componentsJoinedByString:@","]}];
+	[[NSDistributedNotificationCenter defaultCenter] postNotificationName:@"net.tateu.gmailer/fetchAccount" object:nil userInfo:@{@"sender" : @"Automatic", @"data" : [[timer.userInfo[@"emailAddresses"] allObjects] componentsJoinedByString:@","]}];
 
 	[updateTimer invalidate];
 	updateTimer = nil;
@@ -183,51 +195,54 @@ static int loadGmailAccounts()
 		return %orig;
 	}
 
-	if (iOSMailAccounts.count > 0 && info[@"APSMessageTopic"] && [info[@"APSMessageTopic"] isEqualToString:@"com.google.Gmail"]) {
-		TweakLog(@"SpringBoard initWithDictionary xpcMessage\n%@", info);
-		NSDictionary *APSMessageUserInfo = info[@"APSMessageUserInfo"];
-		if (settings[@"newEmailOnly"] && [settings[@"newEmailOnly"] boolValue] && (!APSMessageUserInfo[@"aps"] || !APSMessageUserInfo[@"aps"][@"alert"])) {
-			if (blockGmail) {
-				return nil;
+	if (info[@"APSMessageTopic"] && [info[@"APSMessageTopic"] isEqualToString:@"com.google.Gmail"]) {
+		if (iOSMailAccounts.count > 0) {
+			NSDictionary *APSMessageUserInfo = info[@"APSMessageUserInfo"];
+			if (settings[@"newEmailOnly"] && [settings[@"newEmailOnly"] boolValue] && (!APSMessageUserInfo[@"aps"] || !APSMessageUserInfo[@"aps"][@"alert"])) {
+				if (blockGmail) {
+					return nil;
+				} else {
+					return %orig;
+				}
+			}
+
+			NSMutableSet *emailAddresses = nil;
+			NSString *emailAddress = nil;
+
+			if (APSMessageUserInfo[@"a"]) {
+				emailAddress = [iOSMailAccounts objectForKey:APSMessageUserInfo[@"a"]];
+			}
+
+			NSDate *fireDate = [NSDate dateWithTimeIntervalSinceNow:10];
+			if (updateTimer) {
+				emailAddresses = updateTimer.userInfo[@"emailAddresses"];
+				fireDate = updateTimer.userInfo[@"fireDate"];
+				[updateTimer invalidate];
+				updateTimer = nil;
 			} else {
-				return %orig;
+				emailAddresses = [[NSMutableSet alloc] init];
 			}
-		}
 
-		NSMutableSet *emailAddresses = nil;
-		NSString *emailAddress = nil;
-
-		if (APSMessageUserInfo[@"a"]) {
-			emailAddress = [iOSMailAccounts objectForKey:APSMessageUserInfo[@"a"]];
-		}
-
-		NSDate *fireDate = [NSDate dateWithTimeIntervalSinceNow:10];
-		if (updateTimer) {
-			emailAddresses = updateTimer.userInfo[@"emailAddresses"];
-			fireDate = updateTimer.userInfo[@"fireDate"];
-			[updateTimer invalidate];
-			updateTimer = nil;
-		} else {
-			emailAddresses = [[NSMutableSet alloc] init];
-		}
-
-		if (emailAddress) {
-			[emailAddresses addObject:emailAddress];
-		} else {
-			for (NSString *accountAddress in [iOSMailAccounts allValues]) {
-				[emailAddresses addObject:accountAddress];
+			if (emailAddress) {
+				[emailAddresses addObject:emailAddress];
+			} else {
+				for (NSString *accountAddress in [iOSMailAccounts allValues]) {
+					[emailAddresses addObject:accountAddress];
+				}
 			}
+
+			updateTimer = [[%c(PCSimpleTimer) alloc] initWithFireDate:fireDate serviceIdentifier:@"net.tateu.gmailer" target:self selector:@selector(GAUpdateTimerFired:) userInfo:@{@"fireDate" : fireDate, @"emailAddresses" : emailAddresses}];
+			[updateTimer scheduleInRunLoop:[NSRunLoop mainRunLoop]];
+
+			TweakLog(@"xpcMessage (%@)\n%@", APSMessageUserInfo[@"a"], updateTimer.userInfo);
 		}
 
-		updateTimer = [[%c(PCSimpleTimer) alloc] initWithFireDate:fireDate serviceIdentifier:@"net.tateu.gmailer" target:self selector:@selector(GAUpdateTimerFired:) userInfo:@{@"fireDate" : fireDate, @"emailAddresses" : emailAddresses}];
-		[updateTimer scheduleInRunLoop:[NSRunLoop mainRunLoop]];
-
-		TweakLog(@"xpcMessage (%@)\n%@", APSMessageUserInfo[@"a"], updateTimer.userInfo);
+		if (blockGmail) {
+			return nil;
+		}
 	}
 
-	if (blockGmail) {
-		return nil;
-	}
+	TweakLog(@"SpringBoard initWithDictionary xpcMessage\n%@", info);
 
  	return %orig;
 }
@@ -251,7 +266,7 @@ static int loadGmailAccounts()
 					sectionInfo.allowsNotifications = YES;
 					sectionInfo.showsInLockScreen = YES;
 					sectionInfo.showsInNotificationCenter = YES;
-					sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+					sectionInfo.pushSettings = 63; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
 					sectionInfo.alertType = 1; //Banner
 					TweakLog(@"UNDefaultDataProvider noteSectionInfoDidChange 2\n%@", sectionInfo);
 					[remoteDataProvider setSectionInfo:sectionInfo];
@@ -282,7 +297,7 @@ static int loadGmailAccounts()
 					sectionInfo.allowsNotifications = YES;
 					sectionInfo.showsInLockScreen = YES;
 					sectionInfo.showsInNotificationCenter = YES;
-					sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+					sectionInfo.pushSettings = 63; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
 					sectionInfo.alertType = 1; //Banner
 					TweakLog(@"BBDataProviderManager loadAllDataProviders 2\n%@", sectionInfo);
 					[remoteDataProvider setSectionInfo:sectionInfo];
@@ -311,7 +326,7 @@ static int loadGmailAccounts()
 					sectionInfo.allowsNotifications = YES;
 					sectionInfo.showsInLockScreen = YES;
 					sectionInfo.showsInNotificationCenter = YES;
-					sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+					sectionInfo.pushSettings = 63; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
 					sectionInfo.alertType = 1; //Banner
 					TweakLog(@"RLNDataProvider noteSectionInfoDidChange 2\n%@", sectionInfo);
 					[remoteDataProvider setSectionInfo:sectionInfo];
@@ -342,7 +357,7 @@ static int loadGmailAccounts()
 					sectionInfo.allowsNotifications = YES;
 					sectionInfo.showsInLockScreen = YES;
 					sectionInfo.showsInNotificationCenter = YES;
-					sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+					sectionInfo.pushSettings = 63; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
 					sectionInfo.alertType = 1; //Banner
 					TweakLog(@"BBDataProviderManager loadAllDataProviders 2\n%@", sectionInfo);
 					[remoteDataProvider setSectionInfo:sectionInfo];
@@ -367,8 +382,8 @@ static int loadGmailAccounts()
 		BOOL alwaysFetchAll = settings[@"alwaysFetchAll"] ? [settings[@"alwaysFetchAll"] boolValue] : NO;
 		NSMutableArray *accountsToFetch = [[NSMutableArray alloc] init];
 		NSArray *emailAddresses = nil;
-		if (userInfo[@"emailAddresses"] && userInfo[@"emailAddresses"] != (id)[NSNull null]) {
-			emailAddresses = [userInfo[@"emailAddresses"] componentsSeparatedByString:@","];
+		if (userInfo[@"data"] && userInfo[@"data"] != (id)[NSNull null]) {
+			emailAddresses = [userInfo[@"data"] componentsSeparatedByString:@","];
 		}
 		TweakLog(@"gmailerMessageNamed Automatic\n%@", emailAddresses);
 
@@ -399,14 +414,12 @@ static int loadGmailAccounts()
 			}
 		} else {
 			for (MailAccount *account in [%c(MailAccount) activeAccounts]) {
-				// if ([account isKindOfClass:%c(GmailAccount)]) {
-					TweakLog(@"Fetch All %@", account);
-					if (inboxOnly) {
-						[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
-					} else {
-						[accountsToFetch addObject:account];
-					}
-				// }
+				TweakLog(@"Fetch All %@", account);
+				if (inboxOnly) {
+					[accountsToFetch addObject:[[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]]];
+				} else {
+					[accountsToFetch addObject:account];
+				}
 			}
 		}
 
@@ -418,12 +431,21 @@ static int loadGmailAccounts()
 			}
 		}
 	} else {
-		MailAccount *account = [%c(MailAccount) accountWithUniqueId:sender];
-		TweakLog(@"Fetch Preferences %@", account);
-		if (inboxOnly) {
+		MailAccount *account = nil;
+
+		if ([sender isEqualToString:@"uniqueId"]) {
+			account = [%c(MailAccount) accountWithUniqueId:userInfo[@"data"]];
+		} else if ([sender isEqualToString:@"firstEmailAddress"]) {
+			account = [%c(MailAccount) accountContainingEmailAddress:userInfo[@"data"]];
+		} else if ([sender isEqualToString:@"URLString"]) {
+			account = [%c(MailAccount) accountWithURLString:userInfo[@"data"]];
+		}
+
+		TweakLog(@"Fetch Preferences\n%@\n%@", account, userInfo);
+		if (inboxOnly && account) {
 			MailboxSource *source = [[%c(MailboxSource) alloc] initWithMailbox:[account primaryMailboxUid]];
 			[autoFetchController fetchNow:125 withSources:@[source]];
-		} else {
+		} else if (account) {
 			[autoFetchController fetchNow:125 withAccounts:@[account]];
 		}
 	}
@@ -439,7 +461,7 @@ static int loadGmailAccounts()
 		[self gmailerMessageNamed:@"fetchAccount" withUserInfo:@{@"sender" : @"Automatic"}];
 
 		[[NSDistributedNotificationCenter defaultCenter] addObserverForName:@"net.tateu.gmailer/fetchAccount" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *notification) {
-			[self gmailerMessageNamed:@"fetchAccount" withUserInfo:@{@"sender" : (notification.userInfo[@"sender"] ?: @"Automatic"), @"emailAddresses" : (notification.userInfo[@"emailAddresses"] ?: [NSNull null])}];
+			[self gmailerMessageNamed:@"fetchAccount" withUserInfo:@{@"sender" : (notification.userInfo[@"sender"] ?: @"Automatic"), @"data" : (notification.userInfo[@"data"] ?: [NSNull null])}];
 		}];
 	});
 
@@ -502,22 +524,31 @@ static void LoadSettings()
 	enabled = settings[@"enabled"] ? [settings[@"enabled"] boolValue] : YES;
 	blockGmail = settings[@"blockGmail"] ? [settings[@"blockGmail"] boolValue] : NO;
 
-	if (%c(SpringBoard) && enabled && blockGmail && dataProviderManager) {
+	if (%c(SpringBoard) && enabled && blockGmail) {
 		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void) {
-			BBRemoteDataProvider *remoteDataProvider = [dataProviderManager dataProviderForSectionID:@"com.google.Gmail"];
-			TweakLog(@"LoadSettings\n%@", remoteDataProvider);
-			if (remoteDataProvider) {
-				BBSectionInfo *sectionInfo = remoteDataProvider.defaultSectionInfo;
-				if (sectionInfo) {
-					TweakLog(@"LoadSettings 1\n%@", sectionInfo);
-					sectionInfo.allowsNotifications = YES;
-					sectionInfo.showsInLockScreen = YES;
-					sectionInfo.showsInNotificationCenter = YES;
-					sectionInfo.pushSettings = 55; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
-					sectionInfo.alertType = 1; //Banner
-					TweakLog(@"LoadSettings 2\n%@", sectionInfo);
-					[remoteDataProvider setSectionInfo:sectionInfo];
+			if (dataProviderManager) {
+				BBRemoteDataProvider *remoteDataProvider = [dataProviderManager dataProviderForSectionID:@"com.google.Gmail"];
+				TweakLog(@"LoadSettings\n%@", remoteDataProvider);
+				if (remoteDataProvider) {
+					BBSectionInfo *sectionInfo = remoteDataProvider.defaultSectionInfo;
+					if (sectionInfo) {
+						TweakLog(@"LoadSettings 1\n%@", sectionInfo);
+						sectionInfo.allowsNotifications = YES;
+						sectionInfo.showsInLockScreen = YES;
+						sectionInfo.showsInNotificationCenter = YES;
+						sectionInfo.pushSettings = 63; //49 is 110 001 in reverse-reverse == [s:B--] [e:-SA] -- [s:BSA] [e:BSA]
+						sectionInfo.alertType = 1; //Banner
+						TweakLog(@"LoadSettings 2\n%@", sectionInfo);
+						[remoteDataProvider setSectionInfo:sectionInfo];
+					}
 				}
+			}
+		});
+
+		dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^(void) {
+			SBApplication *app = [[%c(SBApplicationController) sharedInstance] applicationWithBundleIdentifier:@"com.google.Gmail"];
+			if (app) {
+				[app setBadge:@(0)];
 			}
 		});
 	}
